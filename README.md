@@ -63,14 +63,61 @@ bash scripts/deploy-local.sh
 
 ## Usage
 
+### Get a JWT token
+
+After the first deploy, a Cognito user is created with the credentials from `COGNITO_USER_NAME` / `COGNITO_USER_PASSWORD`. Retrieve the `CLIENT_ID` and `api-gateway-url` from Terraform outputs:
+
+```bash
+terraform -chdir=terraform output -raw cognito_user_pool_client_id
+terraform -chdir=terraform output -raw api_endpoint
+```
+
+**First login — set a permanent password**
+
+The user starts in `FORCE_CHANGE_PASSWORD` state. Initiate auth to receive the challenge:
+
+```bash
+aws cognito-idp initiate-auth \
+  --auth-flow USER_PASSWORD_AUTH \
+  --auth-parameters USERNAME=<email>,PASSWORD=<temporary_password> \
+  --client-id <CLIENT_ID> \
+  --region eu-west-2
+```
+
+Respond to the `NEW_PASSWORD_REQUIRED` challenge using the `Session` value from the response above:
+
+```bash
+aws cognito-idp respond-to-auth-challenge \
+  --client-id <CLIENT_ID> \
+  --challenge-name NEW_PASSWORD_REQUIRED \
+  --challenge-responses USERNAME=<email>,NEW_PASSWORD=<new_permanent_password> \
+  --session "<SESSION>" \
+  --region eu-west-2
+```
+
+This returns an `IdToken` and sets the password permanently.
+
+**Subsequent logins**
+
+```bash
+aws cognito-idp initiate-auth \
+  --auth-flow USER_PASSWORD_AUTH \
+  --auth-parameters USERNAME=<email>,PASSWORD=<permanent_password> \
+  --client-id <CLIENT_ID> \
+  --region eu-west-2
+```
+
+Use the returned `IdToken` as a Bearer token in API requests.
+
+### Query the API
+
 ```bash
 # Upload a document
 aws s3 cp my-report.pdf s3://{prefix}-ingestion-pdf-{account_id}/
 
-# Ask a question
-curl -X POST https://{api-gateway-url}/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What does the document say about X?"}'
+# Ask a question (wsl have problems with HTTP/2)
+```powershell 
+(Invoke-RestMethod -Method POST -Uri "https:///{api-gateway-url}/query" -Headers @{"Authorization"=$token;"Content-Type"="application/json"} -Body '{"question": "What you know about AFT?"}').answer
 ```
 
 ```json

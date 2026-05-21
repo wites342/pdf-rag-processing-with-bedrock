@@ -21,6 +21,9 @@ module "foundtion" {
     ingestion_upload_principal_arns = [
         "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/admin",
     ]
+
+    admin_email    = var.admin_email
+    admin_password = var.admin_password
 }
 
 module "rag_stack" {
