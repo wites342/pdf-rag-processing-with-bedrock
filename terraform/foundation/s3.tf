@@ -1,5 +1,7 @@
 resource "aws_s3_bucket" "ingestion_pdf_bucket" {
   bucket = "${var.prefix}-ingestion-pdf-${data.aws_caller_identity.current.account_id}"
+
+  force_destroy = true 
 }
 
 resource "aws_s3_bucket_versioning" "ingestion_pdf_bucket" {
@@ -84,6 +86,8 @@ resource "aws_s3_bucket_notification" "ingestion_pdf_bucket" {
 
 resource "aws_s3_bucket" "ingestion_text_formattted_bucket" {
   bucket = "${var.prefix}-ingestion-text-formatted-${data.aws_caller_identity.current.account_id}"
+
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_versioning" "ingestion_text_formattted_bucket" {
