@@ -122,6 +122,6 @@ bash runbook.sh   # runs the upload command directly
 cat runbook.sh
 ```
 
-```json
-{ "answer": "According to the document...", "sources": ["my-report.pdf"] }
-```
+### Example
+
+![Example](docs/example.png)
