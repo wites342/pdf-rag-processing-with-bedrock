@@ -111,13 +111,15 @@ Use the returned `IdToken` as a Bearer token in API requests.
 
 ### Query the API
 
+After deploy, `runbook.sh` is generated in the project root with all values pre-filled. It contains ready-to-run commands for uploading documents and querying the API — no manual substitution needed.
+
 ```bash
 # Upload a document
-aws s3 cp my-report.pdf s3://{prefix}-ingestion-pdf-{account_id}/
+bash runbook.sh   # runs the upload command directly
 
-# Ask a question (wsl have problems with HTTP/2)
-```powershell 
-(Invoke-RestMethod -Method POST -Uri "https:///{api-gateway-url}/query" -Headers @{"Authorization"=$token;"Content-Type"="application/json"} -Body '{"question": "What you know about AFT?"}').answer
+# The file also contains copy-paste PowerShell and Bash snippets
+# for getting a token and querying the API
+cat runbook.sh
 ```
 
 ```json

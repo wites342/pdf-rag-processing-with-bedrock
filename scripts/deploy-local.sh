@@ -122,6 +122,72 @@ terraform -chdir="$TERRAFORM_DIR" apply -auto-approve -input=false \
   -var="admin_password=${COGNITO_USER_PASSWORD}"
 
 # ─────────────────────────────────────────────────────────────
+# 5. Generate runbook
+# ─────────────────────────────────────────────────────────────
+hr "5 / 4  Generating runbook"
+
+CLIENT_ID=$(terraform -chdir="$TERRAFORM_DIR" output -raw cognito_user_pool_client_id 2>/dev/null || echo "<CLIENT_ID>")
+API_ENDPOINT=$(terraform -chdir="$TERRAFORM_DIR" output -raw api_endpoint 2>/dev/null | sed 's|/$||' || echo "<API_ENDPOINT>")
+BUCKET="future-solutions-dev-ingestion-pdf-${ACCOUNT_ID}"
+REGION="eu-west-2"
+RUNBOOK="$PROJECT_ROOT/runbook.sh"
+
+cat > "$RUNBOOK" <<RUNBOOK
+#!/usr/bin/env bash
+set -euo pipefail
+
+CLIENT_ID="${CLIENT_ID}"
+API_ENDPOINT="${API_ENDPOINT}"
+BUCKET="${BUCKET}"
+REGION="${REGION}"
+USERNAME="${COGNITO_USER_NAME}"
+PASSWORD="${COGNITO_USER_PASSWORD}"
+DOCUMENT="${PROJECT_ROOT}/test/test-document.pdf"
+
+SESSION=\$(aws cognito-idp initiate-auth \\
+  --auth-flow USER_PASSWORD_AUTH \\
+  --auth-parameters USERNAME=\${USERNAME},PASSWORD=\${PASSWORD} \\
+  --client-id \${CLIENT_ID} --region \${REGION} \\
+  --query 'Session' --output text 2>/dev/null || echo "")
+
+if [[ -n "\${SESSION}" && "\${SESSION}" != "None" ]]; then
+  aws cognito-idp respond-to-auth-challenge \\
+    --client-id \${CLIENT_ID} \\
+    --challenge-name NEW_PASSWORD_REQUIRED \\
+    --challenge-responses USERNAME=\${USERNAME},NEW_PASSWORD=\${PASSWORD} \\
+    --session "\${SESSION}" --region \${REGION} > /dev/null
+fi
+
+TOKEN=\$(aws cognito-idp initiate-auth \\
+  --auth-flow USER_PASSWORD_AUTH \\
+  --auth-parameters USERNAME=\${USERNAME},PASSWORD=\${PASSWORD} \\
+  --client-id \${CLIENT_ID} --region \${REGION} \\
+  --query 'AuthenticationResult.IdToken' --output text)
+
+aws s3 cp "\${DOCUMENT}" s3://\${BUCKET}/ --region \${REGION}
+
+echo ""
+echo "── PowerShell snippet (paste into PowerShell) ───────────────"
+RUNBOOK
+
+cat >> "$RUNBOOK" <<'PWSH'
+printf '%s\n' '$auth = aws cognito-idp initiate-auth --auth-flow USER_PASSWORD_AUTH --auth-parameters USERNAME=__USERNAME__,PASSWORD=__PASSWORD__ --client-id __CLIENT_ID__ --region __REGION__ | ConvertFrom-Json'
+printf '%s\n' '$token = "Bearer " + $auth.AuthenticationResult.IdToken'
+printf '%s\n' '$token = $token -replace "`r`n","" -replace "`n","" -replace "`r",""'
+printf '%s\n' '(Invoke-RestMethod -Method POST -Uri "__API_ENDPOINT__/query" -Headers @{"Authorization"=$token;"Content-Type"="application/json"} -Body '"'"'{"question": "What does the document say about AFT?"}'"'"').answer'
+PWSH
+
+sed -i \
+  "s|__USERNAME__|${COGNITO_USER_NAME}|g;
+   s|__PASSWORD__|${COGNITO_USER_PASSWORD}|g;
+   s|__CLIENT_ID__|${CLIENT_ID}|g;
+   s|__REGION__|${REGION}|g;
+   s|__API_ENDPOINT__|${API_ENDPOINT}|g" "$RUNBOOK"
+
+chmod +x "$RUNBOOK"
+ok "Runbook generated → $RUNBOOK"
+
+# ─────────────────────────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────────────────────────
 echo -e "\n${GREEN}${BOLD}Deploy complete!${RESET}\n"
